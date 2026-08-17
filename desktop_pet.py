@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-马维斯桌宠 - 贴边隐藏 + 北京时间 + 文字翻译
+马维斯桌宠 v2 - 贴边隐藏(召唤条) + 北京时间 + 文字翻译
 Windows 版
 功能：
   1. 卡通宠物形象（马维斯：蓝色小猫），会眨眼、呼吸、摇尾巴
-  2. 窗口贴屏幕右边缘，鼠标移开自动隐藏（只露一条边），移过去展开
-  3. 实时显示北京时间（解决电脑是洛杉矶时区的问题）
-  4. 选中文字后按 Ctrl+C 复制，自动翻译成中文，气泡显示
-  5. 右键宠物可退出
+  2. 贴屏幕右边缘，鼠标移开自动隐藏；隐藏后右侧留一条彩色"召唤条"
+  3. 鼠标移到屏幕最右边（召唤条）即可展开桌宠
+  4. 实时显示北京时间（解决电脑是洛杉矶时区的问题）
+  5. 选中文字后按 Ctrl+C 复制，自动翻译成中文，气泡显示
+  6. 右键宠物可退出
 
 依赖安装：
   pip install pyperclip requests mss
@@ -34,7 +35,7 @@ except ImportError:
     requests = None
 
 BJ_TZ = timezone(timedelta(hours=8))   # 北京时间 UTC+8
-EDGE = 4                                # 贴边时露出的宽度(px)
+EDGE = 20                               # 隐藏时露出的召唤条宽度(px)
 WIDTH, HEIGHT = 300, 330                # 窗口尺寸
 
 # 马维斯配色
@@ -80,7 +81,7 @@ class DesktopPet:
     # ---------- 绘制马维斯 ----------
     def _draw_pet(self):
         c = self.canvas
-        cx = WIDTH // 2
+        cx = 130  # 宠物中心偏左，右侧留召唤条
         # 尾巴（画在身体后面）
         self.tail = c.create_arc(cx + 60, 200, cx + 115, 255, start=0, extent=130,
                                  style="arc", outline=BODY_DARK, width=5)
@@ -95,7 +96,7 @@ class DesktopPet:
         c.create_polygon(cx + 57, 128, cx + 48, 90, cx + 31, 120, fill=BLUSH, outline="", tags="body")
         # 脸
         c.create_oval(cx - 56, 88, cx + 56, 195, fill=FACE, outline=OUTLINE, width=3, tags="body")
-        # 眼睛
+        # 眼睛（大眼 + 高光）
         self.eye_l = c.create_oval(cx - 33, 118, cx - 12, 146, fill="#2b2b2b", outline="", tags="body")
         self.eye_r = c.create_oval(cx + 12, 118, cx + 33, 146, fill="#2b2b2b", outline="", tags="body")
         c.create_oval(cx - 29, 121, cx - 25, 125, fill=WHITE, outline="", tags="body")
@@ -103,8 +104,8 @@ class DesktopPet:
         # 腮红
         c.create_oval(cx - 54, 152, cx - 37, 165, fill=BLUSH, outline="", tags="body")
         c.create_oval(cx + 37, 152, cx + 54, 165, fill=BLUSH, outline="", tags="body")
-        # 嘴
-        c.create_arc(cx - 12, 150, cx + 12, 172, start=0, extent=180,
+        # 嘴（微笑：上半弧）
+        c.create_arc(cx - 12, 148, cx + 12, 170, start=180, extent=180,
                      style="arc", outline=OUTLINE, width=2, tags="body")
         # 天线（马维斯标志）
         c.create_line(cx, 88, cx, 66, fill=OUTLINE, width=3, tags="body")
@@ -117,6 +118,9 @@ class DesktopPet:
         # 时钟
         self.clock_id = c.create_text(cx, 292, text="", fill="#2b2b2b",
                                       font=("Consolas", 11, "bold"))
+        # 召唤条（右侧，隐藏时可见）
+        c.create_rectangle(WIDTH - EDGE, 90, WIDTH, 220, fill=BODY, outline=OUTLINE, width=2, tags="tab")
+        c.create_text(WIDTH - EDGE // 2, 155, text="<", fill=WHITE, font=("Arial", 16, "bold"), tags="tab")
         # 退出按钮
         self.exit_btn = c.create_oval(cx + 92, 4, cx + 114, 26, fill="#e57373", outline="", state="hidden")
         self.exit_txt = c.create_text(cx + 103, 15, text="×", fill=WHITE,
@@ -139,7 +143,7 @@ class DesktopPet:
         y = self.root.winfo_y() + e.y - self._drag_y
         self.root.geometry(f"+{x}+{y}")
 
-    # ---------- 贴边隐藏 ----------
+    # ---------- 贴边隐藏 / 召唤 ----------
     def _start_hide_watch(self):
         def watch():
             while True:
@@ -147,20 +151,23 @@ class DesktopPet:
                 px, py = self.root.winfo_pointerx(), self.root.winfo_pointery()
                 wx, wy = self.root.winfo_x(), self.root.winfo_y()
                 if self.hidden:
-                    # 鼠标移到右边缘露出的条上则展开
+                    # 鼠标移到屏幕右边缘召唤条区域 → 展开
                     if px >= self.screen_w - EDGE - 2 and wy <= py <= wy + HEIGHT:
                         self._expand()
                 else:
+                    # 鼠标不在窗口内 → 隐藏
                     if not (wx <= px <= wx + WIDTH and wy <= py <= wy + HEIGHT):
                         self._hide()
         threading.Thread(target=watch, daemon=True).start()
 
     def _hide(self):
         self.hidden = True
+        self.canvas.itemconfig("tab", state="normal")   # 显示召唤条
         self.root.geometry(f"{WIDTH}x{HEIGHT}+{self.screen_w - EDGE}+{self.root.winfo_y()}")
 
     def _expand(self):
         self.hidden = False
+        self.canvas.itemconfig("tab", state="hidden")   # 隐藏召唤条
         self.root.geometry(f"{WIDTH}x{HEIGHT}+{self.screen_w - WIDTH}+{self.root.winfo_y()}")
 
     # ---------- 动画：呼吸 / 眨眼 / 尾巴 ----------
